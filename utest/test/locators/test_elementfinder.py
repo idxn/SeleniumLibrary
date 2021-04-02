@@ -5,6 +5,7 @@ from approvaltests import verify_all
 from approvaltests.reporters import GenericDiffReporterFactory
 from mockito import any, mock, verify, when, unstub
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support.relative_locator import RelativeBy
 
 from SeleniumLibrary.errors import ElementNotFound
 from SeleniumLibrary.locators.elementfinder import ElementFinder
@@ -38,6 +39,10 @@ def test_implicit_xpath():
     _verify_parse_locator("//id=bar", "xpath", "//id=bar")
 
 
+def test_implicit_xpath_and_relative_locator():
+    _verify_parse_locator("//foo:above(//foo2)", "xpath", "//foo:above(//foo2)")
+
+
 def test_no_separator():
     _verify_parse_locator("foo", "default", "foo")
     _verify_parse_locator("", "default", "")
@@ -51,6 +56,17 @@ def test_equal_sign_as_separator():
 def test_colon_as_separator():
     _verify_parse_locator("class:foo", "class", "foo")
     _verify_parse_locator("id:foo:bar", "id", "foo:bar")
+
+
+def test_relative_locator_separator():
+    _verify_parse_locator("class:foo:near(id:foo)", "class", "foo:near(id:foo)")
+    _verify_parse_locator("class:foo:above(id:foo)", "class", "foo:above(id:foo)")
+    _verify_parse_locator("class:foo:below(id:foo)", "class", "foo:below(id:foo)")
+    _verify_parse_locator("class:foo:right_of(id:foo)", "class", "foo:right_of(id:foo)")
+    _verify_parse_locator("class:foo:left_of(id:foo)", "class", "foo:left_of(id:foo)")
+    _verify_parse_locator("class:foo:left_of(id:foo).near(css:#id)", "class", "foo:left_of(id:foo).near(css:#id)")
+    # Current limitation
+    # _verify_parse_locator("class:foo:left_of(id:foo:near(css:#id))", "class", "foo:left_of(id:foo:near(css:#id))")
 
 
 def test_use_first_separator_when_both_are_used():
@@ -73,6 +89,7 @@ def test_remove_whitespace_around_prefix_and_separator():
     _verify_parse_locator("class : foo", "class", "foo")
     _verify_parse_locator("  id  = foo = bar  ", "id", "foo = bar  ")
     _verify_parse_locator("  id  : foo : bar  ", "id", "foo : bar  ")
+    _verify_parse_locator("  id  : foo : right_of( id : bar)  ", "id", "foo : right_of( id : bar)")
 
 
 def test_separator_without_matching_prefix_is_ignored():
@@ -544,6 +561,35 @@ def test_find_by_tag_name(finder):
     assert result == elements
     result = finder.find("tag=div", tag="a", first_only=False)
     assert result == [elements[1], elements[3]]
+
+
+def test_find_by_relative_locator(finder):
+    driver = _get_driver(finder)
+    lowest_elem = _make_mock_element("div")
+    above_elems = _make_mock_elements("div", "a", "span", "a")
+    when(driver).find_element(By.ID, "below").thenReturn(lowest_elem)
+    lowest = finder.find("id=below", first_only=True)
+    when(driver).find_elements(RelativeBy({By.ID: "above"}).above(lowest)).thenReturn(above_elems)
+    result = finder.find("id=above:above(id=below)", first_only=False)
+    assert result == above_elems
+    result = finder.find("id=above:above(id=below)", tag="a", first_only=False)
+    assert result == [above_elems[1], above_elems[3]]
+
+
+def test_find_by_chain_relative_locator(finder):
+    driver = _get_driver(finder)
+    lowest_elem = _make_mock_element("div")
+    right_elem = _make_mock_element("div")
+    above_elems = _make_mock_elements("div", "a", "span", "a")
+    when(driver).find_element(By.ID, "below").thenReturn(lowest_elem)
+    lowest = finder.find("id=below", first_only=True)
+    when(driver).find_element(By.ID, "right").thenReturn(right_elem)
+    right = finder.find("id=right", first_only=True)
+    when(driver).find_elements(RelativeBy({By.CSS_SELECTOR: "#above"}).above(lowest).to_left_of(right)).thenReturn(above_elems)
+    result = finder.find("css=#above:above(id=below):to_left_of(id=right)", first_only=False)
+    assert result == above_elems
+    result = finder.find("css=#above:above(id=below):to_left_of(id=right)", tag="a", first_only=False)
+    assert result == [above_elems[1], above_elems[3]]
 
 
 def test_find_with_sloppy_prefix(finder):
