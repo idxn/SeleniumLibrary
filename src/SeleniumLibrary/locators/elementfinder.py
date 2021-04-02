@@ -20,7 +20,9 @@ from robot.api import logger
 from robot.utils import NormalizedDict
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support.event_firing_webdriver import EventFiringWebElement
+from selenium.webdriver.support.relative_locator import RelativeBy
 from selenium.webdriver.common.by import By
+
 
 from SeleniumLibrary.base import ContextAware
 from SeleniumLibrary.errors import ElementNotFound
@@ -46,6 +48,7 @@ class ElementFinder(ContextAware):
             "sizzle": self._find_by_jquery_selector,
             "tag": self._find_by_tag_name,
             "scLocator": self._find_by_sc_locator,
+            "relative": self._find_by_relative_selector,
             "default": self._find_by_default,
         }
         self._strategies = NormalizedDict(
@@ -74,6 +77,7 @@ class ElementFinder(ContextAware):
             r"|css ?[:|=]|class ?[:|=]|jquery ?[:|=]|sizzle ?[:|=]|tag ?[:|=]|scLocator ?[:|=])",
             re.IGNORECASE,
         )
+        self._relative_locator_re = re.compile()
 
     def find(
         self,
@@ -103,7 +107,7 @@ class ElementFinder(ContextAware):
         while match:
             span = match.span()
             parts.append(locator[: span[0]])
-            locator = locator[span[1] :]
+            locator = locator[span[1]:]
             match = self._split_re.search(locator)
         parts.append(locator)
         return parts
@@ -117,6 +121,29 @@ class ElementFinder(ContextAware):
         if self._is_webelement(locator):
             return locator
         prefix, criteria = self._parse_locator(locator)
+        strategy = self._strategies[prefix]
+        tag, constraints = self._get_tag_and_constraints(tag)
+        elements = strategy(criteria, tag, constraints, parent=parent or self.driver)
+        if required and not elements:
+            raise ElementNotFound(f"{element_type} with locator '{locator}' not found.")
+        if first_only:
+            if not elements:
+                return None
+            return elements[0]
+        return elements
+
+    def _find2(self, locator, tag=None, first_only=True, required=True, parent=None):
+        element_type = "Element" if not tag else tag.capitalize()
+        if parent and not self._is_webelement(parent):
+            raise ValueError(
+                f"Parent must be Selenium WebElement but it was {type(parent)}."
+            )
+        if self._is_webelement(locator):
+            return locator
+        prefix, criteria = self._parse_locator(locator)
+        # if criteria is relative locator
+        #   then remove the rest from criteria and find root
+        #
         strategy = self._strategies[prefix]
         tag, constraints = self._get_tag_and_constraints(tag)
         elements = strategy(criteria, tag, constraints, parent=parent or self.driver)
@@ -226,6 +253,32 @@ class ElementFinder(ContextAware):
         js = f"return isc.AutoTest.getElement('{criteria}')"
         return self._filter_elements([self.driver.execute_script(js)], tag, constraints)
 
+    def _find_by_relative_selector(self, criteria, tag, constraints, parent):
+        self._disallow_webelement_parent(parent)
+        prefix, criteria = self._parse_locator(criteria)
+        # TODO: criteria need to remove the relative selector and the rest
+        if prefix == "class":
+            root = RelativeBy({By.CLASS_NAME: criteria})
+        elif prefix == "css":
+            root = RelativeBy({By.CSS_SELECTOR: criteria})
+        elif prefix == "id":
+            root = RelativeBy({By.ID: criteria})
+        elif prefix == "identifier":  # id or name
+            root = RelativeBy({By.XPATH: f'//*[@id="{criteria}" or @name="{criteria}"]'})
+        elif prefix == "link":
+            root = RelativeBy({By.LINK_TEXT: criteria})
+        elif prefix == "name":
+            root = RelativeBy({By.NAME: criteria})
+        elif prefix == "partial link":
+            root = RelativeBy({By.PARTIAL_LINK_TEXT: criteria})
+        elif prefix == "tag":
+            root = RelativeBy({By.TAG_NAME: criteria})
+        elif prefix == "xpath":
+            root = RelativeBy({By.XPATH: criteria})
+        else:
+            raise ValueError(f"{prefix} locator strategy is not supported as root element in relative selector")
+        print(root)
+
     def _find_by_default(self, criteria, tag, constraints, parent):
         if tag in self._key_attrs:
             key_attrs = self._key_attrs[tag]
@@ -306,7 +359,7 @@ class ElementFinder(ContextAware):
         if index != -1:
             prefix = locator[:index].strip()
             if prefix in self._strategies:
-                return prefix, locator[index + 1 :].lstrip()
+                return prefix, locator[index + 1:].lstrip()
         return "default", locator
 
     def _get_locator_separator_index(self, locator):
