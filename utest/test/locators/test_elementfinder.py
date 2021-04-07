@@ -62,11 +62,11 @@ def test_relative_locator_separator():
     _verify_parse_locator("class:foo:near(id:foo)", "class", "foo:near(id:foo)")
     _verify_parse_locator("class:foo:above(id:foo)", "class", "foo:above(id:foo)")
     _verify_parse_locator("class:foo:below(id:foo)", "class", "foo:below(id:foo)")
-    _verify_parse_locator("class:foo:right_of(id:foo)", "class", "foo:right_of(id:foo)")
-    _verify_parse_locator("class:foo:left_of(id:foo)", "class", "foo:left_of(id:foo)")
-    _verify_parse_locator("class:foo:left_of(id:foo).near(css:#id)", "class", "foo:left_of(id:foo).near(css:#id)")
+    _verify_parse_locator("class:foo:to_right_of(id:foo)", "class", "foo:to_right_of(id:foo)")
+    _verify_parse_locator("class:foo:to_left_of(id:foo)", "class", "foo:to_left_of(id:foo)")
+    _verify_parse_locator("class:foo:to_left_of(id:foo).near(css:#id)", "class", "foo:to_left_of(id:foo).near(css:#id)")
     # Current limitation
-    # _verify_parse_locator("class:foo:left_of(id:foo:near(css:#id))", "class", "foo:left_of(id:foo:near(css:#id))")
+    # _verify_parse_locator("class:foo:to_left_of(id:foo:near(css:#id))", "class", "foo:to_left_of(id:foo:near(css:#id))")
 
 
 def test_use_first_separator_when_both_are_used():
@@ -89,7 +89,7 @@ def test_remove_whitespace_around_prefix_and_separator():
     _verify_parse_locator("class : foo", "class", "foo")
     _verify_parse_locator("  id  = foo = bar  ", "id", "foo = bar  ")
     _verify_parse_locator("  id  : foo : bar  ", "id", "foo : bar  ")
-    _verify_parse_locator("  id  : foo : right_of( id : bar)  ", "id", "foo : right_of( id : bar)")
+    _verify_parse_locator("  id  : foo : to_right_of( id : bar)  ", "id", "foo : to_right_of( id : bar)")
 
 
 def test_separator_without_matching_prefix_is_ignored():
